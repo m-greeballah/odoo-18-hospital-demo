@@ -3,8 +3,8 @@ version: '3.8'
 # ============================================================
 # Docker Compose — Local Development for Odoo 18 Hospital Demo
 # ============================================================
-# Copy .env.example to .env and fill in your values before running:
-#   cp .env.example .env
+# Setup:
+#   cp .env.example .env   # then fill in your passwords
 #   docker compose up -d --build
 
 services:
@@ -42,11 +42,8 @@ services:
       PORT: 5432
       USER: odoo
       PASSWORD: ${POSTGRES_PASSWORD}
-    # Master password injected at runtime from .env — never hardcoded
-    command: >
-      /usr/bin/odoo
-      --config=/etc/odoo/odoo.conf
-      --admin-passwd=${ODOO_MASTER_PASSWD}
+      # Injected into odoo.conf at startup by docker/entrypoint.sh
+      ODOO_MASTER_PASSWD: ${ODOO_MASTER_PASSWD}
     volumes:
       - ./hospital_module:/mnt/extra-addons/hospital_module
       - odoo_data:/var/lib/odoo

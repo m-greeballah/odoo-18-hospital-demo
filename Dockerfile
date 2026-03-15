@@ -3,25 +3,25 @@
 # ============================================================
 FROM odoo:18.0
 
-# Switch to root for installation
 USER root
 
 # Install additional system dependencies if needed
-RUN apt-get update && apt-get install -y \
-    git \
+RUN apt-get update && apt-get install -y git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy custom addons into the Odoo addons path
+# Copy custom addons
 COPY --chown=odoo:odoo ./hospital_module /mnt/extra-addons/hospital_module
 
-# Copy custom Odoo configuration
+# Copy Odoo config (no hardcoded admin_passwd — injected at runtime)
 COPY --chown=odoo:odoo ./docker/odoo.conf /etc/odoo/odoo.conf
 
-# Switch back to odoo user
+# Copy and register our custom entrypoint
+COPY --chown=root:root ./docker/entrypoint.sh /custom-entrypoint.sh
+RUN chmod +x /custom-entrypoint.sh
+
 USER odoo
 
-# Expose standard Odoo port
 EXPOSE 8069
 
-# Default command
-CMD ["/usr/bin/odoo", "--config=/etc/odoo/odoo.conf"]
+ENTRYPOINT ["/custom-entrypoint.sh"]
+CMD ["odoo"]
