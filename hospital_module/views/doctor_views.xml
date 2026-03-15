@@ -31,14 +31,14 @@
                     <notebook>
                         <page string="Patients">
                             <field name="patient_ids">
-                                <tree>
+                                <list>
                                     <field name="ref"/>
                                     <field name="name"/>
                                     <field name="age"/>
                                     <field name="gender"/>
                                     <field name="phone"/>
                                     <field name="state" widget="badge"/>
-                                </tree>
+                                </list>
                             </field>
                         </page>
                     </notebook>
@@ -57,7 +57,7 @@
         <field name="name">hospital.doctor.tree</field>
         <field name="model">hospital.doctor</field>
         <field name="arch" type="xml">
-            <tree string="Doctors">
+            <list string="Doctors">
                 <field name="ref"/>
                 <field name="name"/>
                 <field name="specialization"/>
@@ -66,7 +66,7 @@
                 <field name="phone"/>
                 <field name="patient_count"/>
                 <field name="is_available" widget="boolean_toggle"/>
-            </tree>
+            </list>
         </field>
     </record>
 

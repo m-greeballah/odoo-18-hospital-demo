@@ -40,7 +40,7 @@
                     <notebook>
                         <page string="Appointments">
                             <field name="appointment_ids">
-                                <tree>
+                                <list>
                                     <field name="ref"/>
                                     <field name="appointment_date"/>
                                     <field name="doctor_id"/>
@@ -49,7 +49,7 @@
                                            decoration-info="state == 'confirmed'"
                                            decoration-warning="state == 'in_progress'"
                                            decoration-danger="state == 'cancelled'"/>
-                                </tree>
+                                </list>
                             </field>
                         </page>
                         <page string="Notes">
@@ -71,7 +71,7 @@
         <field name="name">hospital.patient.tree</field>
         <field name="model">hospital.patient</field>
         <field name="arch" type="xml">
-            <tree string="Patients" decoration-muted="state == 'inactive'">
+            <list string="Patients" decoration-muted="state == 'inactive'">
                 <field name="ref"/>
                 <field name="name"/>
                 <field name="age"/>
@@ -83,7 +83,7 @@
                 <field name="state" widget="badge"
                        decoration-success="state == 'active'"
                        decoration-danger="state == 'inactive'"/>
-            </tree>
+            </list>
         </field>
     </record>
 

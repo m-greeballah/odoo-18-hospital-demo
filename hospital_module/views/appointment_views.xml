@@ -63,7 +63,7 @@
         <field name="name">hospital.appointment.tree</field>
         <field name="model">hospital.appointment</field>
         <field name="arch" type="xml">
-            <tree string="Appointments"
+            <list string="Appointments"
                   decoration-success="state == 'done'"
                   decoration-info="state == 'confirmed'"
                   decoration-warning="state == 'in_progress'"
@@ -80,7 +80,7 @@
                        decoration-info="state == 'confirmed'"
                        decoration-warning="state == 'in_progress'"
                        decoration-danger="state == 'cancelled'"/>
-            </tree>
+            </list>
         </field>
     </record>
 
