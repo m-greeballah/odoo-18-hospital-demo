@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Demo Doctors -->
+    <record id="doctor_1" model="hospital.doctor">
+        <field name="name">Dr. Ahmed Hassan</field>
+        <field name="specialization">cardiology</field>
+        <field name="degree">MD, FACC</field>
+        <field name="experience_years">15</field>
+        <field name="phone">+20-100-1234567</field>
+        <field name="email">ahmed.hassan@hospital.com</field>
+    </record>
+
+    <record id="doctor_2" model="hospital.doctor">
+        <field name="name">Dr. Sara Mohamed</field>
+        <field name="specialization">pediatrics</field>
+        <field name="degree">MD, FAAP</field>
+        <field name="experience_years">10</field>
+        <field name="phone">+20-100-7654321</field>
+        <field name="email">sara.mohamed@hospital.com</field>
+    </record>
+
+    <record id="doctor_3" model="hospital.doctor">
+        <field name="name">Dr. Omar Khalil</field>
+        <field name="specialization">general</field>
+        <field name="degree">MBBS</field>
+        <field name="experience_years">8</field>
+        <field name="phone">+20-100-1112222</field>
+        <field name="email">omar.khalil@hospital.com</field>
+    </record>
+
+    <!-- Demo Patients -->
+    <record id="patient_1" model="hospital.patient">
+        <field name="name">Mohamed Ali</field>
+        <field name="gender">male</field>
+        <field name="date_of_birth">1985-06-15</field>
+        <field name="blood_group">a+</field>
+        <field name="phone">+20-111-1234567</field>
+        <field name="doctor_id" ref="doctor_1"/>
+    </record>
+
+    <record id="patient_2" model="hospital.patient">
+        <field name="name">Fatima Ibrahim</field>
+        <field name="gender">female</field>
+        <field name="date_of_birth">1992-03-22</field>
+        <field name="blood_group">o+</field>
+        <field name="phone">+20-111-7654321</field>
+        <field name="doctor_id" ref="doctor_2"/>
+    </record>
+
+    <record id="patient_3" model="hospital.patient">
+        <field name="name">Youssef Mahmoud</field>
+        <field name="gender">male</field>
+        <field name="date_of_birth">2010-09-10</field>
+        <field name="blood_group">b+</field>
+        <field name="phone">+20-111-3334444</field>
+        <field name="doctor_id" ref="doctor_2"/>
+    </record>
+
+</odoo>

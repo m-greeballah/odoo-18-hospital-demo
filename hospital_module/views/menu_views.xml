@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Sequences -->
+    <record id="seq_hospital_patient" model="ir.sequence">
+        <field name="name">Hospital Patient Sequence</field>
+        <field name="code">hospital.patient</field>
+        <field name="prefix">PAT</field>
+        <field name="padding">5</field>
+        <field name="number_next">1</field>
+        <field name="number_increment">1</field>
+    </record>
+
+    <record id="seq_hospital_doctor" model="ir.sequence">
+        <field name="name">Hospital Doctor Sequence</field>
+        <field name="code">hospital.doctor</field>
+        <field name="prefix">DOC</field>
+        <field name="padding">4</field>
+        <field name="number_next">1</field>
+        <field name="number_increment">1</field>
+    </record>
+
+    <record id="seq_hospital_appointment" model="ir.sequence">
+        <field name="name">Hospital Appointment Sequence</field>
+        <field name="code">hospital.appointment</field>
+        <field name="prefix">APT</field>
+        <field name="padding">6</field>
+        <field name="number_next">1</field>
+        <field name="number_increment">1</field>
+    </record>
+
+    <!-- Main Menu -->
+    <menuitem id="menu_hospital_root"
+              name="Hospital"
+              web_icon="hospital_module,static/description/icon.png"
+              sequence="10"/>
+
+    <!-- Sub Menus -->
+    <menuitem id="menu_hospital_appointments"
+              name="Appointments"
+              parent="menu_hospital_root"
+              sequence="10"/>
+
+    <menuitem id="menu_hospital_appointment_list"
+              name="All Appointments"
+              parent="menu_hospital_appointments"
+              action="action_hospital_appointment"
+              sequence="10"/>
+
+    <menuitem id="menu_hospital_patients"
+              name="Patients"
+              parent="menu_hospital_root"
+              sequence="20"/>
+
+    <menuitem id="menu_hospital_patient_list"
+              name="All Patients"
+              parent="menu_hospital_patients"
+              action="action_hospital_patient"
+              sequence="10"/>
+
+    <menuitem id="menu_hospital_configuration"
+              name="Configuration"
+              parent="menu_hospital_root"
+              sequence="30"/>
+
+    <menuitem id="menu_hospital_doctors"
+              name="Doctors"
+              parent="menu_hospital_configuration"
+              action="action_hospital_doctor"
+              sequence="10"/>
+
+</odoo>

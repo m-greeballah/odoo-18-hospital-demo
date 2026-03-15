@@ -1,0 +1,56 @@
+version: '3.8'
+
+# ============================================================
+# Docker Compose — Local Development for Odoo 18 Hospital Demo
+# ============================================================
+
+services:
+
+  db:
+    image: postgres:16
+    container_name: odoo18_db
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - odoo_network
+
+  odoo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: odoo18_app
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8069:8069"
+    environment:
+      HOST: db
+      PORT: 5432
+      USER: odoo
+      PASSWORD: odoo
+    volumes:
+      # Mount source for live development (comment out for production-like testing)
+      - ./hospital_module:/mnt/extra-addons/hospital_module
+      - odoo_data:/var/lib/odoo
+    networks:
+      - odoo_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  odoo_data:
+
+networks:
+  odoo_network:
+    driver: bridge

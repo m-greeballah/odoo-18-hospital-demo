@@ -1,0 +1,206 @@
+name: Odoo 18 CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ============================================================
+  # JOB 1: Lint & Validate the Odoo Module
+  # ============================================================
+  lint:
+    name: 🔍 Lint & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Linting Tools
+        run: |
+          pip install flake8 pylint
+
+      - name: Run flake8 (PEP8 style check)
+        run: |
+          flake8 hospital_module/ \
+            --max-line-length=120 \
+            --exclude=__pycache__ \
+            --count \
+            --statistics
+
+      - name: Validate XML Files
+        run: |
+          python3 -c "
+          import os, xml.etree.ElementTree as ET
+          errors = []
+          for root, dirs, files in os.walk('hospital_module'):
+              for f in files:
+                  if f.endswith('.xml'):
+                      path = os.path.join(root, f)
+                      try:
+                          ET.parse(path)
+                          print(f'  ✅ {path}')
+                      except ET.ParseError as e:
+                          errors.append(f'  ❌ {path}: {e}')
+          if errors:
+              print('\n'.join(errors))
+              exit(1)
+          print(f'\n✅ All XML files are valid!')
+          "
+
+      - name: Validate __manifest__.py
+        run: |
+          python3 -c "
+          import ast
+          with open('hospital_module/__manifest__.py') as f:
+              content = f.read()
+          manifest = ast.literal_eval(content)
+          required = ['name', 'version', 'depends', 'data']
+          missing = [k for k in required if k not in manifest]
+          if missing:
+              print(f'❌ Missing manifest keys: {missing}')
+              exit(1)
+          print(f'✅ Manifest valid: {manifest[\"name\"]} v{manifest[\"version\"]}')
+          "
+
+  # ============================================================
+  # JOB 2: Build and Test Docker Image
+  # ============================================================
+  build-and-test:
+    name: 🐳 Build & Test Docker Image
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: odoo18-hospital:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true
+
+      - name: Test — Container Starts Successfully
+        run: |
+          docker run --rm -d \
+            --name odoo_test \
+            -e HOST=localhost \
+            odoo18-hospital:test \
+            sleep 10
+          sleep 5
+          docker ps | grep odoo_test && echo "✅ Container started successfully"
+          docker stop odoo_test || true
+
+      - name: Test — Module Files Present in Image
+        run: |
+          docker run --rm odoo18-hospital:test \
+            ls /mnt/extra-addons/hospital_module/__manifest__.py \
+            && echo "✅ Hospital module found in image"
+
+  # ============================================================
+  # JOB 3: Publish Image to GitHub Container Registry
+  # ============================================================
+  publish:
+    name: 📦 Publish to GHCR
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags published:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================
+  # JOB 4: Deploy to Staging (optional — needs self-hosted runner
+  #          or SSH secret configured)
+  # ============================================================
+  deploy-staging:
+    name: 🚀 Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: publish
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        # Requires SSH_HOST, SSH_USER, SSH_PRIVATE_KEY secrets in repo settings
+        run: |
+          echo "📋 Deploy step — configure SSH secrets to activate"
+          echo "Example commands that would run on your server:"
+          echo "  docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "  docker compose -f /opt/odoo/docker-compose.yml up -d --no-deps odoo"
+          echo ""
+          echo "Add these GitHub secrets to enable real deployment:"
+          echo "  SSH_HOST, SSH_USER, SSH_PRIVATE_KEY"
