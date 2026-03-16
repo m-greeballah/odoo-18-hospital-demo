@@ -1,0 +1,26 @@
+{{- if .Values.odoo.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "odoo-hospital.fullname" . }}-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "odoo-hospital.labels" . | nindent 4 }}
+  {{- with .Values.odoo.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.odoo.ingress.className }}
+  rules:
+    - host: {{ .Values.odoo.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odoo-hospital.fullname" . }}-odoo
+                port:
+                  number: {{ .Values.odoo.service.port }}
+{{- end }}

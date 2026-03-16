@@ -1,0 +1,17 @@
+{{- if .Values.odoo.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "odoo-hospital.odooPvcName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "odoo-hospital.labels" . | nindent 4 }}
+    app.kubernetes.io/component: application
+spec:
+  accessModes:
+    - {{ .Values.odoo.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.odoo.persistence.size }}
+  storageClassName: {{ .Values.odoo.persistence.storageClass }}
+{{- end }}

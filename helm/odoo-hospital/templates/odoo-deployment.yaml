@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odoo-hospital.fullname" . }}-odoo
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "odoo-hospital.labels" . | nindent 4 }}
+    app.kubernetes.io/component: application
+  annotations:
+    # Checksum forces pod restart when secret values change
+    checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+spec:
+  replicas: {{ .Values.odoo.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "odoo-hospital.odooSelectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "odoo-hospital.odooSelectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.odoo.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h {{ include "odoo-hospital.fullname" . }}-postgres -U $(POSTGRES_USER); do
+                echo "Waiting for PostgreSQL..."; sleep 3;
+              done
+              echo "PostgreSQL is ready."
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odoo-hospital.secretName" . }}
+                  key: POSTGRES_USER
+      containers:
+        - name: odoo
+          image: "{{ .Values.odoo.image.repository }}:{{ .Values.odoo.image.tag }}"
+          imagePullPolicy: {{ .Values.odoo.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8069
+              protocol: TCP
+            - name: longpolling
+              containerPort: 8072
+              protocol: TCP
+          env:
+            - name: HOST
+              value: {{ include "odoo-hospital.fullname" . }}-postgres
+            - name: PORT
+              value: {{ .Values.postgresql.service.port | quote }}
+            - name: USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odoo-hospital.secretName" . }}
+                  key: POSTGRES_USER
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odoo-hospital.secretName" . }}
+                  key: POSTGRES_PASSWORD
+            - name: ODOO_MASTER_PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odoo-hospital.secretName" . }}
+                  key: ODOO_MASTER_PASSWD
+            {{- with .Values.odoo.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.odoo.persistence.enabled }}
+          volumeMounts:
+            - name: odoo-data
+              mountPath: /var/lib/odoo
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /web/health
+              port: http
+            initialDelaySeconds: {{ .Values.odoo.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odoo.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.odoo.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /web/health
+              port: http
+            initialDelaySeconds: {{ .Values.odoo.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.odoo.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.odoo.readinessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.odoo.resources | nindent 12 }}
+      {{- if .Values.odoo.persistence.enabled }}
+      volumes:
+        - name: odoo-data
+          persistentVolumeClaim:
+            claimName: {{ include "odoo-hospital.odooPvcName" . }}
+      {{- end }}

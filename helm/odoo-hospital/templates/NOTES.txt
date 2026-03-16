@@ -1,0 +1,38 @@
+🏥 Odoo Hospital — {{ .Values.global.environment | upper }} Environment
+=======================================================
+
+✅ Release:   {{ .Release.Name }}
+✅ Namespace: {{ .Release.Namespace }}
+✅ Image:     {{ .Values.odoo.image.repository }}:{{ .Values.odoo.image.tag }}
+✅ Replicas:  {{ .Values.odoo.replicaCount }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Access Odoo
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{{- if .Values.odoo.ingress.enabled }}
+  URL: http://{{ .Values.odoo.ingress.host }}
+
+  Make sure {{ .Values.odoo.ingress.host }} is in your /etc/hosts:
+    echo "$(minikube ip)  {{ .Values.odoo.ingress.host }}" | sudo tee -a /etc/hosts
+{{- else }}
+  Port-forward to access locally:
+    kubectl port-forward svc/{{ include "odoo-hospital.fullname" . }}-odoo 8069:8069 -n {{ .Release.Namespace }}
+  Then open: http://localhost:8069
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Useful Commands
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Watch pods
+  kubectl get pods -n {{ .Release.Namespace }} -w
+
+  # Odoo logs
+  kubectl logs -f deployment/{{ include "odoo-hospital.fullname" . }}-odoo -n {{ .Release.Namespace }}
+
+  # Upgrade release
+  helm upgrade {{ .Release.Name }} ./helm/odoo-hospital \
+    -f helm/values-{{ .Values.global.environment }}.yaml \
+    -n {{ .Release.Namespace }}
+
+  # Rollback
+  helm rollback {{ .Release.Name }} -n {{ .Release.Namespace }}

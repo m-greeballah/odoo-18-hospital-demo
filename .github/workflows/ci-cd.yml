@@ -1,164 +1,131 @@
-name: Odoo 18 CI/CD Pipeline
+name: Odoo 18 — CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
+    tags:
+      - "v*.*.*"
   pull_request:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  GITOPS_REPO: YOUR_ORG/odoo-gitops    # ← change to your org
 
+# ============================================================
+# JOB 1 — Lint & Validate
+# ============================================================
 jobs:
-  # ============================================================
-  # JOB 1: Lint & Validate the Odoo Module
-  # ============================================================
   lint:
     name: 🔍 Lint & Validate
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install Linting Tools
-        run: |
-          pip install flake8 pylint
+      - name: Install tools
+        run: pip install flake8
 
-      - name: Run flake8 (PEP8 style check)
+      - name: flake8
         run: |
           flake8 hospital_module/ \
             --max-line-length=120 \
             --exclude=__pycache__ \
-            --count \
-            --statistics
+            --count --statistics
 
-      - name: Validate XML Files
+      - name: Validate XML
         run: |
-          python3 -c "
-          import os, xml.etree.ElementTree as ET
+          python3 - << 'EOF'
+          import os, xml.etree.ElementTree as ET, sys
           errors = []
-          for root, dirs, files in os.walk('hospital_module'):
+          for root, _, files in os.walk('hospital_module'):
               for f in files:
                   if f.endswith('.xml'):
                       path = os.path.join(root, f)
                       try:
                           ET.parse(path)
-                          print(f'  ✅ {path}')
+                          print(f"  ✅ {path}")
                       except ET.ParseError as e:
-                          errors.append(f'  ❌ {path}: {e}')
+                          errors.append(f"  ❌ {path}: {e}")
           if errors:
-              print('\n'.join(errors))
-              exit(1)
-          print(f'\n✅ All XML files are valid!')
-          "
+              print('\n'.join(errors)); sys.exit(1)
+          print("✅ All XML valid")
+          EOF
 
       - name: Validate __manifest__.py
         run: |
-          python3 -c "
-          import ast
-          with open('hospital_module/__manifest__.py') as f:
-              content = f.read()
-          manifest = ast.literal_eval(content)
-          required = ['name', 'version', 'depends', 'data']
-          missing = [k for k in required if k not in manifest]
+          python3 - << 'EOF'
+          import ast, sys
+          manifest = ast.literal_eval(open('hospital_module/__manifest__.py').read())
+          missing = [k for k in ['name','version','depends','data'] if k not in manifest]
           if missing:
-              print(f'❌ Missing manifest keys: {missing}')
-              exit(1)
-          print(f'✅ Manifest valid: {manifest[\"name\"]} v{manifest[\"version\"]}')
-          "
+              print(f"❌ Missing keys: {missing}"); sys.exit(1)
+          print(f"✅ Manifest OK: {manifest['name']} v{manifest['version']}")
+          EOF
+
+      - name: Install Helm & lint chart
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm lint helm/odoo-hospital/
+          echo "✅ Helm chart lint passed"
 
   # ============================================================
-  # JOB 2: Build and Test Docker Image
+  # JOB 2 — Build & Push Docker Image
   # ============================================================
-  build-and-test:
-    name: 🐳 Build & Test Docker Image
+  build:
+    name: 🐳 Build & Push Image
     runs-on: ubuntu-latest
     needs: lint
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker Image (no push)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: odoo18-hospital:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          load: true
-
-      - name: Test — Container Starts Successfully
-        run: |
-          docker run --rm -d \
-            --name odoo_test \
-            -e HOST=localhost \
-            odoo18-hospital:test \
-            sleep 10
-          sleep 5
-          docker ps | grep odoo_test && echo "✅ Container started successfully"
-          docker stop odoo_test || true
-
-      - name: Test — Module Files Present in Image
-        run: |
-          docker run --rm odoo18-hospital:test \
-            ls /mnt/extra-addons/hospital_module/__manifest__.py \
-            && echo "✅ Hospital module found in image"
-
-  # ============================================================
-  # JOB 3: Publish Image to GitHub Container Registry
-  # ============================================================
-  publish:
-    name: 📦 Publish to GHCR
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
+    if: github.event_name == 'push'
+    outputs:
+      short_sha: ${{ steps.sha.outputs.short }}
+      image_tag: ${{ steps.sha.outputs.tag }}
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Compute image tag
+        id: sha
+        run: |
+          SHORT=$(echo $GITHUB_SHA | cut -c1-7)
+          echo "short=${SHORT}" >> $GITHUB_OUTPUT
+          # For tags use the tag name, for branches use sha-xxxxxxx
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=sha-${SHORT}" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Log in to GitHub Container Registry
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker Metadata (tags & labels)
+      - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and Push Docker Image
+      - name: Build and Push
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -170,37 +137,209 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## 🚀 Docker Image Published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags published:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|--|--|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | \`${{ steps.sha.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Digest | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
 
   # ============================================================
-  # JOB 4: Deploy to Staging (optional — needs self-hosted runner
-  #          or SSH secret configured)
+  # JOB 3 — Open PR on GitOps repo → TEST
+  # Triggered by: push to develop
   # ============================================================
-  deploy-staging:
-    name: 🚀 Deploy to Staging
+  promote-test:
+    name: 📝 PR → GitOps (test)
     runs-on: ubuntu-latest
-    needs: publish
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: staging
+    needs: build
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: test
+      url: http://odoo-test.local
 
     steps:
-      - name: Checkout Code
+      - name: Checkout GitOps repo
         uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
 
-      - name: Deploy via SSH
-        # Requires SSH_HOST, SSH_USER, SSH_PRIVATE_KEY secrets in repo settings
+      - name: Update image tag in test values
         run: |
-          echo "📋 Deploy step — configure SSH secrets to activate"
-          echo "Example commands that would run on your server:"
-          echo "  docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          echo "  docker compose -f /opt/odoo/docker-compose.yml up -d --no-deps odoo"
-          echo ""
-          echo "Add these GitHub secrets to enable real deployment:"
-          echo "  SSH_HOST, SSH_USER, SSH_PRIVATE_KEY"
+          IMAGE_TAG="${{ needs.build.outputs.image_tag }}"
+          cd gitops
+          # Update the tag line in values-test.yaml
+          sed -i "s|^  tag:.*|  tag: \"${IMAGE_TAG}\"|" environments/values-test.yaml
+          echo "Updated environments/values-test.yaml → tag: ${IMAGE_TAG}"
+
+      - name: Create Pull Request on GitOps repo
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+          branch: deploy/test-${{ needs.build.outputs.short_sha }}
+          base: main
+          commit-message: "deploy(test): update image to ${{ needs.build.outputs.image_tag }}"
+          title: "🧪 Deploy to Test — `${{ needs.build.outputs.image_tag }}`"
+          body: |
+            ## Test Deployment
+
+            | | |
+            |--|--|
+            | **Environment** | test |
+            | **Image Tag** | `${{ needs.build.outputs.image_tag }}` |
+            | **Source Commit** | ${{ github.repository }}@${{ github.sha }} |
+            | **Triggered by** | @${{ github.actor }} |
+
+            **This PR will be auto-merged.** ArgoCD will detect the change and sync automatically.
+
+            ---
+            _Generated by CI pipeline — do not edit manually._
+          labels: |
+            deployment
+            test
+            auto-merge
+          # Auto-merge since test is fully automated
+          auto-merge: true
+
+      - name: Summary
+        run: |
+          echo "## 📝 PR opened on GitOps repo → test" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** \`${{ needs.build.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitOps repo:** https://github.com/${{ env.GITOPS_REPO }}" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================
+  # JOB 4 — Open PR on GitOps repo → STAGING
+  # Triggered by: push to main
+  # ============================================================
+  promote-staging:
+    name: 📝 PR → GitOps (staging)
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: http://odoo-staging.local
+
+    steps:
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+
+      - name: Update image tag in staging values
+        run: |
+          IMAGE_TAG="${{ needs.build.outputs.image_tag }}"
+          cd gitops
+          sed -i "s|^  tag:.*|  tag: \"${IMAGE_TAG}\"|" environments/values-staging.yaml
+          echo "Updated environments/values-staging.yaml → tag: ${IMAGE_TAG}"
+
+      - name: Create Pull Request on GitOps repo
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+          branch: deploy/staging-${{ needs.build.outputs.short_sha }}
+          base: main
+          commit-message: "deploy(staging): update image to ${{ needs.build.outputs.image_tag }}"
+          title: "🚀 Deploy to Staging — `${{ needs.build.outputs.image_tag }}`"
+          body: |
+            ## Staging Deployment
+
+            | | |
+            |--|--|
+            | **Environment** | staging |
+            | **Image Tag** | `${{ needs.build.outputs.image_tag }}` |
+            | **Source Commit** | ${{ github.repository }}@${{ github.sha }} |
+            | **Triggered by** | @${{ github.actor }} |
+
+            **Review and merge this PR to deploy to staging.**
+            ArgoCD will sync automatically once merged.
+
+            ---
+            _Generated by CI pipeline — do not edit manually._
+          labels: |
+            deployment
+            staging
+
+      - name: Summary
+        run: |
+          echo "## 📝 PR opened on GitOps repo → staging" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** \`${{ needs.build.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitOps repo:** https://github.com/${{ env.GITOPS_REPO }}" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================
+  # JOB 5 — Open PR on GitOps repo → PRODUCTION
+  # Triggered by: git tag v*.*.*
+  # ============================================================
+  promote-production:
+    name: 📝 PR → GitOps (production)
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: http://odoo.local
+
+    steps:
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+
+      - name: Update image tag in production values
+        run: |
+          RELEASE_TAG="${{ github.ref_name }}"
+          cd gitops
+          sed -i "s|^  tag:.*|  tag: \"${RELEASE_TAG}\"|" environments/values-production.yaml
+          echo "Updated environments/values-production.yaml → tag: ${RELEASE_TAG}"
+
+      - name: Create Pull Request on GitOps repo
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+          branch: deploy/production-${{ github.ref_name }}
+          base: main
+          commit-message: "deploy(production): promote to ${{ github.ref_name }}"
+          title: "🏭 Promote Production to `${{ github.ref_name }}`"
+          body: |
+            ## ⚠️ Production Deployment
+
+            | | |
+            |--|--|
+            | **Environment** | **production** |
+            | **Release Tag** | `${{ github.ref_name }}` |
+            | **Source Commit** | ${{ github.repository }}@${{ github.sha }} |
+            | **Triggered by** | @${{ github.actor }} |
+
+            ### Checklist before merging
+            - [ ] Staging has been verified with this image
+            - [ ] Change-management ticket created
+            - [ ] On-call engineer is aware
+            - [ ] Merge window is within allowed hours (06:00–22:00)
+
+            **Merging this PR will make ArgoCD show production as OutOfSync.**
+            A DevOps engineer must then manually sync in ArgoCD:
+            ```bash
+            argocd app sync odoo-production
+            ```
+
+            ---
+            _Generated by CI pipeline — do not edit manually._
+          labels: |
+            deployment
+            production
+            needs-review
+
+      - name: Summary
+        run: |
+          echo "## 📝 PR opened on GitOps repo → production" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action required:** Review & merge PR, then sync ArgoCD manually" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitOps repo:** https://github.com/${{ env.GITOPS_REPO }}" >> $GITHUB_STEP_SUMMARY

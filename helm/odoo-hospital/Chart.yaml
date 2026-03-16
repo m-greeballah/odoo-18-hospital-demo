@@ -1,0 +1,17 @@
+apiVersion: v2
+name: odoo-hospital
+description: Odoo 18 Hospital Management Module — Helm Chart
+type: application
+version: 1.0.0
+appVersion: "18.0"
+
+keywords:
+  - odoo
+  - hospital
+  - erp
+
+maintainers:
+  - name: DevOps Team
+    email: devops@your-org.com
+
+dependencies: []

@@ -1,0 +1,109 @@
+# =============================================================
+# values.yaml — default values for the odoo-hospital Helm chart
+# Override per environment in values-test/staging/production.yaml
+# =============================================================
+
+# ── Global ────────────────────────────────────────────────────
+global:
+  environment: base
+
+# ── Odoo Application ─────────────────────────────────────────
+odoo:
+  image:
+    repository: ghcr.io/YOUR_ORG/odoo-cicd-demo
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 8069
+    longpollingPort: 8072
+
+  ingress:
+    enabled: true
+    className: nginx
+    host: odoo.local
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  persistence:
+    enabled: true
+    storageClass: standard
+    size: 10Gi
+    accessMode: ReadWriteOnce
+
+  # Probe settings
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    failureThreshold: 5
+
+  readinessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 3
+
+  # Extra env vars to inject into the Odoo container
+  extraEnv: []
+
+  # Pod-level annotations (used to force rolling restarts)
+  podAnnotations: {}
+
+# ── PostgreSQL ────────────────────────────────────────────────
+postgresql:
+  image:
+    repository: postgres
+    tag: "16"
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 5432
+
+  persistence:
+    enabled: true
+    storageClass: standard
+    size: 5Gi
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# ── Secrets ──────────────────────────────────────────────────
+# Values here are PLACEHOLDERS only.
+# In real deployments, override via:
+#   --set secrets.postgresPassword=... --set secrets.odooMasterPassword=...
+# Or use an external secret manager (Vault, AWS SSM, etc.)
+secrets:
+  postgresUser: odoo
+  postgresDb: odoo
+  postgresPassword: "REPLACE_ME"
+  odooMasterPassword: "REPLACE_ME"
+
+# ── Autoscaling (disabled by default) ────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 80
+
+# ── Service Account ───────────────────────────────────────────
+serviceAccount:
+  create: false
+  name: ""
