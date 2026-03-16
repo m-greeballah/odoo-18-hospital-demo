@@ -11,7 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  GITOPS_REPO: YOUR_ORG/odoo-gitops    # ← change to your org
+  GITOPS_REPO: m-greeballah/odoo18-gitops
 
 # ============================================================
 # JOB 1 — Lint & Validate

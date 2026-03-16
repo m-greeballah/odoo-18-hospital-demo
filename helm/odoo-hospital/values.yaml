@@ -10,7 +10,7 @@ global:
 # ── Odoo Application ─────────────────────────────────────────
 odoo:
   image:
-    repository: ghcr.io/YOUR_ORG/odoo-cicd-demo
+    repository: ghcr.io/m-greeballah/odoo-18-hospital-demo
     tag: latest
     pullPolicy: IfNotPresent
 
